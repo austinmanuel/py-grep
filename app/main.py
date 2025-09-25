@@ -5,20 +5,28 @@ import sys
 
 def starting_class(pattern):
     if pattern.startswith("\\"):
+        print("Character class found:", pattern[:2])
         return pattern[:2]
     elif pattern.startswith("["):
+        print("Character class found:", pattern[:pattern.index("]")+1])
         if "]" not in pattern:
             raise RuntimeError("Unclosed character class")
-        return pattern[:pattern.index("]")+1]
+        return pattern[:pattern.index("]")+1] 
     else:
+        print("Literal character found:", pattern[0])
         return pattern[0]
     
 def match(input_line, pattern):
-    x = starting_class(pattern)
-    for char in input_line:
-        if match_pattern(char, x):
-            if match_pattern(input_line[input_line.index(char):], pattern):
-                return True
+    if pattern.startswith("^"):
+        if match_pattern(input_line, pattern[1:]):
+            return True
+        return False
+    else:
+        x = starting_class(pattern)
+        for char in input_line:
+            if match_pattern(char, x):
+                if match_pattern(input_line[input_line.index(char):], pattern):
+                    return True
 
 def match_pattern(input_line, pattern):
     if pattern == "":
