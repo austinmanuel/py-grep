@@ -3,10 +3,27 @@ import sys
 # import pyparsing - available if you need it!
 # import lark - available if you need it!
 
+def starting_class(pattern):
+    if pattern.startswith("\\"):
+        return pattern[:2]
+    elif pattern.startswith("["):
+        if "]" not in pattern:
+            raise RuntimeError("Unclosed character class")
+        return pattern[:pattern.index("]")+1]
+    else:
+        return pattern[0]
+    
+def match(input_line, pattern):
+    x = starting_class(pattern)
+    for char in input_line:
+        if match_pattern(char, x):
+            if match_pattern(input_line[input_line.index(char):], pattern):
+                return True
+
 def match_pattern(input_line, pattern):
     if pattern == "":
         return True
-    if input_line == None:
+    if input_line == "":
         return False
     
 
@@ -54,7 +71,7 @@ def main():
         print("Expected first argument to be '-E'")
         exit(1)
 
-    if match_pattern(input_line, pattern):
+    if match(input_line, pattern):
         print("True")
         exit(0)
     else:
