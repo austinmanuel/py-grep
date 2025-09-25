@@ -4,19 +4,21 @@ import sys
 # import lark - available if you need it!
 
 def match_pattern(input_line, pattern):
-    if pattern == None:
+    if pattern == "":
         return True
     if input_line == None:
         return False
     
 
-    if pattern.startwith(r"\d"):
+    if pattern.startswith(r"\d"):
         if input_line[0].isdigit():
-            match_pattern(input_line[1:], pattern[2:])
+            if match_pattern(input_line[1:], pattern[2:]):
+                return True
         return False
     elif pattern.startswith(r"\w"):
         if input_line[0].isalnum() or input_line[0] == "_":
-            match_pattern(input_line[1:], pattern[2:])
+            if match_pattern(input_line[1:], pattern[2:]):
+                return True
         return False
     elif pattern.startswith("["):
         if "]" not in pattern:
@@ -24,15 +26,18 @@ def match_pattern(input_line, pattern):
         if pattern[1] == "^":
             chars = pattern[2:pattern.index("]")]
             if input_line[0] not in chars:
-                match_pattern(input_line[1:], pattern[pattern.index("]"):])
+                if match_pattern(input_line[1:], pattern[pattern.index("]")+1:]):
+                    return True
             return False
         else:
             chars = pattern[1:pattern.index("]")]
             if input_line[0] in chars:
-                match_pattern(input_line[1:], pattern[pattern.index("]"):])
+                if match_pattern(input_line[1:], pattern[pattern.index("]")+1:]):
+                    return True
             return False
     elif pattern[0] == input_line[0]:
-        return match_pattern(input_line[1:], pattern[1:])
+        if match_pattern(input_line[1:], pattern[1:]):
+            return True
     else:
         return False
   
@@ -49,9 +54,11 @@ def main():
         print("Expected first argument to be '-E'")
         exit(1)
 
-    if match_pattern(input_line, pattern, 1):
+    if match_pattern(input_line, pattern):
+        print("True")
         exit(0)
     else:
+        print("False")
         exit(1)
 
 
