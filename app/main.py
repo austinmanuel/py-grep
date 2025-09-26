@@ -3,27 +3,15 @@ import sys
 # import pyparsing - available if you need it!
 # import lark - available if you need it!
 
-def starting_class(pattern):
-    if pattern.startswith("\\"):
-        print("Character class found:", pattern[:2])
-        return pattern[:2]
-    elif pattern.startswith("["):
-        print("Character class found:", pattern[:pattern.index("]")+1])
-        if "]" not in pattern:
-            raise RuntimeError("Unclosed character class")
-        return pattern[:pattern.index("]")+1] 
-    else:
-        print("Literal character found:", pattern[0])
-        return pattern[0]
-    
+# TODO Handle newlines in powershell
 
-def match(input_line, pattern):
+def match(input_line: str, pattern: list) -> bool:
     anchor_start, anchor_end = False, False
 
-    if pattern.startswith("^"):
+    if pattern[0][1] == "^":
         anchor_start = True
         pattern = pattern[1:]
-    if pattern.endswith("$"):
+    if pattern[-1][1] == "$":
         anchor_end = True
         pattern = pattern[:-1]
 
@@ -45,50 +33,89 @@ def match(input_line, pattern):
                     return success
         return False
 
-
-def match_pattern(input_line, pattern):
-    if pattern == "":
-        if input_line == "":
-            return True, True
+def compile_pattern(pattern: str) -> list:
+    compiled_pattern = []
+    while pattern:
+        if pattern[0] == "^":
+            compiled_pattern.append(("ANCHOR", "^", None))
+            pattern = pattern[1:]
+        elif pattern[0] == "\\":
+            compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
+            pattern = pattern[2:]
+        elif pattern[0] == "[":
+            if "]" not in pattern:
+                raise RuntimeError("Unclosed character group")
+            compiled_pattern.append(("GROUP", pattern[:pattern.index("]")+1], None))
+            pattern = pattern[pattern.index("]")+1:]
+        elif pattern[0] == "+":
+            if not compiled_pattern:
+                raise RuntimeError("Nothing to repeat for '+'")
+            old = compiled_pattern.pop()
+            compiled_pattern.append((old[0], old[1], "+"))
+            pattern = pattern[1:]
+        elif pattern[0] == "$":
+            compiled_pattern.append(("ANCHOR", "$", None))
+            pattern = pattern[1:]
         else:
-            return True, False
+            compiled_pattern.append(("LITERAL", pattern[0], None))
+            pattern = pattern[1:]
+    return compiled_pattern
+
+def single_match(input_line: str, token) -> tuple[bool, int]:
+    if not input_line:
+        return False, 0
+    kind, value, _ = token
+
+    if kind == "LITERAL" and input_line[0] == value:
+        print("Found literal: ", value)
+        return True, 1
+    if kind == "CLASS" and value == "\\d" and input_line[0].isdigit():
+        print("Found class match: ", value)
+        return True, 1
+    if kind == "CLASS" and value == "\\w" and input_line[0].isalnum() or input_line[0] == "_":
+        print("Found class match: ", value)
+        return True, 1
+    if kind == "GROUP":
+        chars = value[1:-1]
+        if chars[0] == "^":
+            if input_line[0] not in chars[1:]:
+                print("Found neg group match: ", value)
+                return True, 1
+        else:
+            if input_line[0] in chars:
+                print("Found group match: ", value)
+                return True, 1
+    return False, 0         
+
+def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
+    if not pattern:
+        return True, input_line == ""
     if input_line == "":
         return False, True
     
-    if pattern.startswith(r"\d"):
-        if input_line[0].isdigit():
-            success, complete = match_pattern(input_line[1:], pattern[2:])
-            return success, complete
-        return False, False
-    
-    elif pattern.startswith(r"\w"):
-        if input_line[0].isalnum() or input_line[0] == "_":
-            success, complete = match_pattern(input_line[1:], pattern[2:])
-            return success, complete
-        return False, False
-    
-    elif pattern.startswith("["):
-        if "]" not in pattern:
-            raise RuntimeError("Unclosed character class")
-        if pattern[1] == "^":
-            chars = pattern[2:pattern.index("]")]
-            if input_line[0] not in chars:
-                success, complete = match_pattern(input_line[1:], pattern[pattern.index("]")+1:])
-                return success, complete
-            return False, False
-        else:
-            chars = pattern[1:pattern.index("]")]
-            if input_line[0] in chars:
-                success, complete = match_pattern(input_line[1:], pattern[pattern.index("]")+1:])
-                return success, complete
-            return False, False
-        
-    elif pattern[0] == input_line[0]:
-        success, complete = match_pattern(input_line[1:], pattern[1:])
-        return success, complete
-    else:
-        return False, False
+    kind, value, quant = pattern[0]
+   
+    if quant == "+":
+        ok, consumed = single_match(input_line, (kind, value, None))
+        if not ok:
+            return False, False    
 
+        idx = consumed
+
+        while True:
+            success, complete = match_pattern(input_line[idx:], pattern[1:])
+            if success:
+                return success, complete
+            ok, c = single_match(input_line[idx:], (kind, value, None))
+            if not ok:
+                break
+            idx += c
+        return False, False
+    
+    ok, consumed = single_match(input_line, (kind, value, None))
+    if ok:
+        return match_pattern(input_line[consumed:], pattern[1:])
+    return False, False
 
 def main():
     pattern = sys.argv[2]
@@ -98,7 +125,10 @@ def main():
         print("Expected first argument to be '-E'")
         exit(1)
 
-    if match(input_line, pattern):
+    compiled_pattern = compile_pattern(pattern) 
+    print(compiled_pattern)
+
+    if match(input_line, compiled_pattern):
         print("True")
         exit(0)
     else:
