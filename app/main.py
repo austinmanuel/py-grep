@@ -53,6 +53,12 @@ def compile_pattern(pattern: str) -> list:
             old = compiled_pattern.pop()
             compiled_pattern.append((old[0], old[1], "+"))
             pattern = pattern[1:]
+        elif pattern[0] == "?":
+            if not compiled_pattern:
+                raise RuntimeError("Nothing to optionally match for '?'")
+            old = compiled_pattern.pop()
+            compiled_pattern.append((old[0], old[1], "?"))
+            pattern = pattern[1:]
         elif pattern[0] == "$":
             compiled_pattern.append(("ANCHOR", "$", None))
             pattern = pattern[1:]
@@ -94,6 +100,13 @@ def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
         return False, True
     
     kind, value, quant = pattern[0]
+
+    if quant == "?":
+        ok, consumed = single_match(input_line, (kind, value, None))
+        if ok: 
+            return match_pattern(input_line[consumed:], pattern[1:])
+        else:
+            return match_pattern(input_line, pattern[1:])
    
     if quant == "+":
         ok, consumed = single_match(input_line, (kind, value, None))
