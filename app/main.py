@@ -28,13 +28,20 @@ def parse_args():
 def search_file(filename, pattern):
     try:
         with open(filename, 'r') as file:
+            found = False
             for line in file:
+                line = line.strip()
                 if match(line, pattern):
                     print(line)
-                    return True
+                    found = True
     except FileNotFoundError:
             print(f"Error: The file '{file}' was not found.")
             return False
+    
+    if found:
+        return True
+    else:
+        return False
         
 
 def search_stdin(input_line, pattern):
