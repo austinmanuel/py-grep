@@ -1,8 +1,5 @@
 import sys
 
-# import pyparsing - available if you need it!
-# import lark - available if you need it!
-
 # TODO Handle newlines in powershell
 
 def match(input_line: str, pattern: list) -> bool:
@@ -40,18 +37,31 @@ def compile_pattern(pattern: str) -> list:
             case "^":
                 compiled_pattern.append(("ANCHOR", "^", None))
                 pattern = pattern[1:]
-            case "\\":
-                compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
-                pattern = pattern[2:]
+            case "$":
+                compiled_pattern.append(("ANCHOR", "$", None))
+                pattern = pattern[1:]
             case "[":
                 if "]" not in pattern:
                     raise RuntimeError("Unclosed character group")
                 compiled_pattern.append(("GROUP", pattern[:pattern.index("]")+1], None))
                 pattern = pattern[pattern.index("]")+1:]
+            case "(":
+                if ")" not in pattern:
+                    raise RuntimeError("Unclosed alternation")
+                compiled_pattern.append(("ALT", pattern[1:pattern.index(")")], None))
+                pattern = pattern[pattern.index(")")+1:]
+            case "\\":
+                compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
+                pattern = pattern[2:]
+            case ".":
+                compiled_pattern.append(("CLASS", ".", None))
+                pattern = pattern[1:]
             case "+":
                 if not compiled_pattern:
                     raise RuntimeError("Nothing to repeat for '+'")
-                # Expand "+" quantifier into a literal + a "*" quantifier for the same symbol
+                if compiled_pattern[0][2]:
+                    raise RuntimeError("Double quantifier in pattern")
+                # Expand "+" quantifier into a literal token with no quantifier + a literal token with a "*" quantifier for the same symbol
                 old = compiled_pattern.pop()
                 compiled_pattern.append((old[0], old[1], None))
                 compiled_pattern.append((old[0], old[1], "*"))
@@ -59,25 +69,30 @@ def compile_pattern(pattern: str) -> list:
             case "*":
                 if not compiled_pattern:
                     raise RuntimeError("Nothing to optionally repeat for '*'")
+                if compiled_pattern[0][2]:
+                    raise RuntimeError("Double quantifier in pattern")
                 old = compiled_pattern.pop()
                 compiled_pattern.append((old[0], old[1], "*"))
                 pattern = pattern[1:]
             case "?":
                 if not compiled_pattern:
                     raise RuntimeError("Nothing to optionally match for '?'")
+                if compiled_pattern[0][2]:
+                    raise RuntimeError("Double quantifier in pattern")
                 old = compiled_pattern.pop()
                 compiled_pattern.append((old[0], old[1], "?"))
-                pattern = pattern[1:]
-            case "$":
-                compiled_pattern.append(("ANCHOR", "$", None))
-                pattern = pattern[1:]
-            case ".":
-                compiled_pattern.append(("CLASS", ".", None))
                 pattern = pattern[1:]
             case _:
                 compiled_pattern.append(("LITERAL", pattern[0], None))
                 pattern = pattern[1:]
     return compiled_pattern
+
+def alternation_match(input_line: str, patterns: list):
+    for pattern in patterns:
+        if match(input_line, pattern):
+            print(f"Matched on pattern {pattern}, consuming {len(pattern)} characters of input")
+            return True, len(pattern)
+    return False, 0
 
 def single_match(input_line: str, token) -> tuple[bool, int]:
     if not input_line:
@@ -111,12 +126,22 @@ def single_match(input_line: str, token) -> tuple[bool, int]:
 def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
     if not pattern:
         return True, input_line == ""
-    if input_line == "":
-        return False, True
     
     kind, value, quant = pattern[0]
 
+    if kind == "ALT":
+        compiled_patterns = [compile_pattern(x) for x in value.split("|")]
+        print(f"Sending {input_line} to alternation_match()")
+        ok, consumed = alternation_match(input_line, compiled_patterns)
+        if ok:
+            print(f"Input: {input_line}")
+            print(f"Sending back to match_pattern with input line: {input_line[consumed:]} and pattern: {pattern[1:]}")
+            return match_pattern(input_line[consumed:], pattern[1:])
+        else:
+            return False, False
+
     if quant == "?":
+        print("Entered ? block")
         ok, consumed = single_match(input_line, (kind, value, None))
         if ok: 
             return match_pattern(input_line[consumed:], pattern[1:])
@@ -139,23 +164,6 @@ def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
                 if not ok:
                     break
                 idx += c
-        return False, False
-   
-    if quant == "+":
-        ok, consumed = single_match(input_line, (kind, value, None))
-        if not ok:
-            return False, False    
-
-        idx = consumed
-
-        while True:
-            success, complete = match_pattern(input_line[idx:], pattern[1:])
-            if success:
-                return success, complete
-            ok, c = single_match(input_line[idx:], (kind, value, None))
-            if not ok:
-                break
-            idx += c
         return False, False
     
     ok, consumed = single_match(input_line, (kind, value, None))
