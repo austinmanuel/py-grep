@@ -2,24 +2,22 @@ import sys, argparse
 
 # TODO Handle newlines in powershell
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog='pygrep',
-        description='A simplified Python implementation of grep'
+        prog="pygrep", description="A simplified Python implementation of grep"
     )
 
     parser.add_argument(
-        '-E', '--Expression',
+        "-E",
+        "--Expression",
         required=True,
         type=str,
-        help="The expression string to evaluate"
+        help="The expression string to evaluate",
     )
-    
+
     parser.add_argument(
-        "src_file", 
-        nargs="?",
-        type=str,
-        help="File to perform the search on (optional)"
+        "src_file", nargs="?", type=str, help="File to perform the search on (optional)"
     )
 
     return parser.parse_args()
@@ -27,7 +25,7 @@ def parse_args():
 
 def search_file(filename, pattern):
     try:
-        with open(filename, 'r') as file:
+        with open(filename, "r") as file:
             found = False
             for line in file:
                 line = line.strip()
@@ -35,14 +33,14 @@ def search_file(filename, pattern):
                     print(line)
                     found = True
     except FileNotFoundError:
-            print(f"Error: The file '{file}' was not found.")
-            return False
-    
+        print(f"Error: The file '{file}' was not found.")
+        return False
+
     if found:
         return True
     else:
         return False
-        
+
 
 def search_stdin(input_line, pattern):
     if match(input_line, pattern):
@@ -50,6 +48,7 @@ def search_stdin(input_line, pattern):
         return True
     else:
         return False
+
 
 def match(input_line: str, pattern: list) -> bool:
     anchor_start, anchor_end = False, False
@@ -68,7 +67,7 @@ def match(input_line: str, pattern: list) -> bool:
                 return success and complete
             else:
                 return success
-    else: 
+    else:
         for index in range(len(input_line)):
             substring = input_line[index:]
             success, complete = match_pattern(substring, pattern)
@@ -78,6 +77,7 @@ def match(input_line: str, pattern: list) -> bool:
                 else:
                     return success
         return False
+
 
 def compile_pattern(pattern: str) -> list:
     compiled_pattern = []
@@ -92,13 +92,15 @@ def compile_pattern(pattern: str) -> list:
             case "[":
                 if "]" not in pattern:
                     raise RuntimeError("Unclosed character group")
-                compiled_pattern.append(("GROUP", pattern[:pattern.index("]")+1], None))
-                pattern = pattern[pattern.index("]")+1:]
+                compiled_pattern.append(
+                    ("GROUP", pattern[: pattern.index("]") + 1], None)
+                )
+                pattern = pattern[pattern.index("]") + 1 :]
             case "(":
                 if ")" not in pattern:
                     raise RuntimeError("Unclosed alternation")
-                compiled_pattern.append(("ALT", pattern[1:pattern.index(")")], None))
-                pattern = pattern[pattern.index(")")+1:]
+                compiled_pattern.append(("ALT", pattern[1 : pattern.index(")")], None))
+                pattern = pattern[pattern.index(")") + 1 :]
             case "\\":
                 compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
                 pattern = pattern[2:]
@@ -136,11 +138,13 @@ def compile_pattern(pattern: str) -> list:
                 pattern = pattern[1:]
     return compiled_pattern
 
+
 def alternation_match(input_line: str, patterns: list):
     for pattern in patterns:
         if match(input_line, pattern):
             return True, len(pattern)
     return False, 0
+
 
 def single_match(input_line: str, token) -> tuple[bool, int]:
     if not input_line:
@@ -151,7 +155,12 @@ def single_match(input_line: str, token) -> tuple[bool, int]:
         return True, 1
     if kind == "CLASS" and value == "\\d" and input_line[0].isdigit():
         return True, 1
-    if kind == "CLASS" and value == "\\w" and input_line[0].isalnum() or input_line[0] == "_":
+    if (
+        kind == "CLASS"
+        and value == "\\w"
+        and input_line[0].isalnum()
+        or input_line[0] == "_"
+    ):
         return True, 1
     if kind == "CLASS" and value == "." and input_line[0]:
         return True, 1
@@ -163,12 +172,13 @@ def single_match(input_line: str, token) -> tuple[bool, int]:
         else:
             if input_line[0] in chars:
                 return True, 1
-    return False, 0         
+    return False, 0
+
 
 def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
     if not pattern:
         return True, input_line == ""
-    
+
     kind, value, quant = pattern[0]
 
     if kind == "ALT":
@@ -181,14 +191,14 @@ def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
 
     if quant == "?":
         ok, consumed = single_match(input_line, (kind, value, None))
-        if ok: 
+        if ok:
             return match_pattern(input_line[consumed:], pattern[1:])
         else:
             return match_pattern(input_line, pattern[1:])
-        
+
     if quant == "*":
         ok, consumed = single_match(input_line, (kind, value, None))
-        if not ok: 
+        if not ok:
             return match_pattern(input_line, pattern[1:])
         else:
 
@@ -203,17 +213,18 @@ def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
                     break
                 idx += c
         return False, False
-    
+
     ok, consumed = single_match(input_line, (kind, value, None))
     if ok:
         return match_pattern(input_line[consumed:], pattern[1:])
     return False, False
 
+
 def main():
     args = parse_args()
 
-    compiled_pattern = compile_pattern(args.Expression) 
-    
+    compiled_pattern = compile_pattern(args.Expression)
+
     if args.src_file:
         if search_file(args.src_file, compiled_pattern):
             exit(0)
