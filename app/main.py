@@ -36,38 +36,47 @@ def match(input_line: str, pattern: list) -> bool:
 def compile_pattern(pattern: str) -> list:
     compiled_pattern = []
     while pattern:
-        if pattern[0] == "^":
-            compiled_pattern.append(("ANCHOR", "^", None))
-            pattern = pattern[1:]
-        elif pattern[0] == "\\":
-            compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
-            pattern = pattern[2:]
-        elif pattern[0] == "[":
-            if "]" not in pattern:
-                raise RuntimeError("Unclosed character group")
-            compiled_pattern.append(("GROUP", pattern[:pattern.index("]")+1], None))
-            pattern = pattern[pattern.index("]")+1:]
-        elif pattern[0] == "+":
-            if not compiled_pattern:
-                raise RuntimeError("Nothing to repeat for '+'")
-            old = compiled_pattern.pop()
-            compiled_pattern.append((old[0], old[1], "+"))
-            pattern = pattern[1:]
-        elif pattern[0] == "?":
-            if not compiled_pattern:
-                raise RuntimeError("Nothing to optionally match for '?'")
-            old = compiled_pattern.pop()
-            compiled_pattern.append((old[0], old[1], "?"))
-            pattern = pattern[1:]
-        elif pattern[0] == "$":
-            compiled_pattern.append(("ANCHOR", "$", None))
-            pattern = pattern[1:]
-        elif pattern[0] == ".":
-            compiled_pattern.append(("CLASS", ".", None))
-            pattern = pattern[1:]
-        else:
-            compiled_pattern.append(("LITERAL", pattern[0], None))
-            pattern = pattern[1:]
+        match pattern[0]:
+            case "^":
+                compiled_pattern.append(("ANCHOR", "^", None))
+                pattern = pattern[1:]
+            case "\\":
+                compiled_pattern.append(("CLASS", "\\" + pattern[1], None))
+                pattern = pattern[2:]
+            case "[":
+                if "]" not in pattern:
+                    raise RuntimeError("Unclosed character group")
+                compiled_pattern.append(("GROUP", pattern[:pattern.index("]")+1], None))
+                pattern = pattern[pattern.index("]")+1:]
+            case "+":
+                if not compiled_pattern:
+                    raise RuntimeError("Nothing to repeat for '+'")
+                # Expand "+" quantifier into a literal + a "*" quantifier for the same symbol
+                old = compiled_pattern.pop()
+                compiled_pattern.append((old[0], old[1], None))
+                compiled_pattern.append((old[0], old[1], "*"))
+                pattern = pattern[1:]
+            case "*":
+                if not compiled_pattern:
+                    raise RuntimeError("Nothing to optionally repeat for '*'")
+                old = compiled_pattern.pop()
+                compiled_pattern.append((old[0], old[1], "*"))
+                pattern = pattern[1:]
+            case "?":
+                if not compiled_pattern:
+                    raise RuntimeError("Nothing to optionally match for '?'")
+                old = compiled_pattern.pop()
+                compiled_pattern.append((old[0], old[1], "?"))
+                pattern = pattern[1:]
+            case "$":
+                compiled_pattern.append(("ANCHOR", "$", None))
+                pattern = pattern[1:]
+            case ".":
+                compiled_pattern.append(("CLASS", ".", None))
+                pattern = pattern[1:]
+            case _:
+                compiled_pattern.append(("LITERAL", pattern[0], None))
+                pattern = pattern[1:]
     return compiled_pattern
 
 def single_match(input_line: str, token) -> tuple[bool, int]:
@@ -113,6 +122,24 @@ def match_pattern(input_line: str, pattern: list) -> tuple[bool, bool]:
             return match_pattern(input_line[consumed:], pattern[1:])
         else:
             return match_pattern(input_line, pattern[1:])
+        
+    if quant == "*":
+        ok, consumed = single_match(input_line, (kind, value, None))
+        if not ok: 
+            return match_pattern(input_line, pattern[1:])
+        else:
+
+            idx = consumed
+
+            while True:
+                success, complete = match_pattern(input_line[idx:], pattern[1:])
+                if success:
+                    return success, complete
+                ok, c = single_match(input_line[idx:], (kind, value, None))
+                if not ok:
+                    break
+                idx += c
+        return False, False
    
     if quant == "+":
         ok, consumed = single_match(input_line, (kind, value, None))
