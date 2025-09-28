@@ -62,6 +62,9 @@ def compile_pattern(pattern: str) -> list:
         elif pattern[0] == "$":
             compiled_pattern.append(("ANCHOR", "$", None))
             pattern = pattern[1:]
+        elif pattern[0] == ".":
+            compiled_pattern.append(("CLASS", ".", None))
+            pattern = pattern[1:]
         else:
             compiled_pattern.append(("LITERAL", pattern[0], None))
             pattern = pattern[1:]
@@ -79,6 +82,9 @@ def single_match(input_line: str, token) -> tuple[bool, int]:
         print("Found class match: ", value)
         return True, 1
     if kind == "CLASS" and value == "\\w" and input_line[0].isalnum() or input_line[0] == "_":
+        print("Found class match: ", value)
+        return True, 1
+    if kind == "CLASS" and value == "." and input_line[0]:
         print("Found class match: ", value)
         return True, 1
     if kind == "GROUP":
